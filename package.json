@@ -1,0 +1,23 @@
+{
+  "name": "regestudiantes",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.86.2",
+    "bootstrap-icons": "^1.13.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "file-saver": "^2.0.5",
+    "xlsx": "^0.18.5"
+  },
+  "description": ""
+}
