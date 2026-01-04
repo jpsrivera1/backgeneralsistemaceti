@@ -162,6 +162,7 @@ const obtenerTallasEstudiante = async (req, res) => {
             .select(`
                 id,
                 talla,
+                cantidad,
                 fecha_registro,
                 uniform_items (
                     id,
@@ -191,7 +192,7 @@ const obtenerTallasEstudiante = async (req, res) => {
 const guardarTallas = async (req, res) => {
     try {
         const { studentId } = req.params;
-        const { tallas } = req.body; // Array de { item_id, talla }
+        const { tallas } = req.body; // Array de { item_id, talla, cantidad }
 
         if (!tallas || !Array.isArray(tallas)) {
             return res.status(400).json({ error: 'Se requiere un array de tallas' });
@@ -201,7 +202,8 @@ const guardarTallas = async (req, res) => {
         const registros = tallas.map(t => ({
             student_id: studentId,
             item_id: t.item_id,
-            talla: t.talla
+            talla: t.talla,
+            cantidad: t.cantidad || 1 // Si no se proporciona cantidad, usar 1 por defecto
         }));
 
         // Usar upsert para insertar o actualizar
