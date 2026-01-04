@@ -484,11 +484,12 @@ const exportUniformReportExcel = async (req, res) => {
 // Obtener reporte de inventario de tallas por categoría
 const obtenerReporteInventarioTallas = async (req, res) => {
     try {
-        // Obtener todas las tallas registradas con información de categoría e item en una sola consulta
+        // Obtener todas las tallas registradas con información de categoría, item y cantidad
         const { data: tallasData, error: errorTallas } = await supabase
             .from('student_uniform_sizes')
             .select(`
                 talla,
+                cantidad,
                 item_id,
                 uniform_items!inner (
                     id,
@@ -514,6 +515,7 @@ const obtenerReporteInventarioTallas = async (req, res) => {
             const categoria = registro.uniform_items.uniform_categories;
             const item = registro.uniform_items;
             const talla = registro.talla || 'Sin especificar';
+            const cantidad = registro.cantidad || 1; // Usar la cantidad registrada
 
             // Inicializar categoría si no existe
             if (!categorias[categoria.id]) {
@@ -534,11 +536,11 @@ const obtenerReporteInventarioTallas = async (req, res) => {
                 };
             }
 
-            // Contar tallas
+            // Sumar cantidades por talla
             if (!categorias[categoria.id].items[item.id].tallas[talla]) {
                 categorias[categoria.id].items[item.id].tallas[talla] = 0;
             }
-            categorias[categoria.id].items[item.id].tallas[talla]++;
+            categorias[categoria.id].items[item.id].tallas[talla] += cantidad;
         });
 
         // Convertir a formato de array y ordenar
