@@ -337,9 +337,11 @@ const verificarMesPagado = async (req, res) => {
     }
 };
 
-// Calcular mora (solo de febrero a octubre, si el día actual es mayor a 5)
+// Calcular mora (solo de febrero a octubre, si la fecha actual es posterior al día 5 del mes que se está pagando)
 const calcularMora = (mesNombre = '') => {
     const fechaActual = new Date();
+    const mesActual = fechaActual.getMonth() + 1; // getMonth() devuelve 0-11
+    const anioActual = fechaActual.getFullYear();
     const diaActual = fechaActual.getDate();
     
     // Mapeo de nombres de mes a números
@@ -351,10 +353,19 @@ const calcularMora = (mesNombre = '') => {
     
     const mesPagar = mesesMap[mesNombre.toUpperCase()] || 0;
     
-    // Solo aplicar mora de febrero (2) a octubre (10) y después del día 5
-    if (mesPagar >= 2 && mesPagar <= 10 && diaActual > 5) {
+    // Solo aplicar mora de febrero (2) a octubre (10)
+    if (mesPagar < 2 || mesPagar > 10) {
+        return 0.00;
+    }
+    
+    // Crear fecha de vencimiento: día 5 del mes que se está pagando
+    const fechaVencimiento = new Date(anioActual, mesPagar - 1, 5);
+    
+    // Solo aplicar mora si la fecha actual es posterior a la fecha de vencimiento
+    if (fechaActual > fechaVencimiento) {
         return 30.00;
     }
+    
     return 0.00;
 };
 
