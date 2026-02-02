@@ -16,9 +16,14 @@ const reportesRoutes = require('./routes/reportes.routes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Configuración de CORS para desarrollo local
+// Configuración de CORS para desarrollo local y producción
 const corsOptions = {
   origin: [
+    // URLs de Producción
+    'https://registrosceti.vercel.app', // Front de registro estudiantes
+    'https://paneladminceti.vercel.app', // Panel admin
+    'https://controlacademico.vercel.app', // Sistema NFC reportes académicos
+    // URLs de Desarrollo Local
     'http://localhost:5173', // Front de registro estudiantes
     'http://localhost:5174', // Sistema NFC reportes académicos
     'http://localhost:4525', // Panel admin
