@@ -8,12 +8,30 @@ const pagosRoutes = require('./routes/pagos.routes');
 const uniformesRoutes = require('./routes/uniformes.routes');
 const cursosRoutes = require('./routes/cursos.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
+const asistenciasRoutes = require('./routes/asistencias.routes');
+const docentesRoutes = require('./routes/docentes.routes');
+const asistenciasDocentesRoutes = require('./routes/asistenciasDocentes.routes');
+const reportesRoutes = require('./routes/reportes.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Configuración de CORS para desarrollo local
+const corsOptions = {
+  origin: [
+    'http://localhost:5173', // Front de registro estudiantes
+    'http://localhost:5174', // Sistema NFC reportes académicos
+    'http://localhost:4525', // Panel admin
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+    'http://127.0.0.1:4525'
+  ],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
 // Middlewares
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Ruta principal
@@ -27,7 +45,10 @@ app.get('/', (req, res) => {
             pagos: '/api/pagos',
             uniformes: '/api/uniformes',
             cursos: '/api/cursos',
-            dashboard: '/api/dashboard'
+            dashboard: '/api/dashboard',
+            asistencias: '/api/asistencias',
+            docentes: '/api/docentes',
+            reportes: '/api/reportes'
         }
     });
 });
@@ -49,6 +70,18 @@ app.use('/api/cursos', cursosRoutes);
 
 // Rutas del dashboard
 app.use('/api/dashboard', dashboardRoutes);
+
+// Rutas de asistencias
+app.use('/api/asistencias', asistenciasRoutes);
+
+// Rutas de docentes
+app.use('/api/docentes', docentesRoutes);
+
+// Rutas de asistencias de docentes
+app.use('/api/asistencias-docentes', asistenciasDocentesRoutes);
+
+// Rutas de reportes
+app.use('/api/reportes', reportesRoutes);
 
 // Manejo de rutas no encontradas
 app.use((req, res) => {

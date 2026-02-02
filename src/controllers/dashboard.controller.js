@@ -1,5 +1,18 @@
 const supabase = require('../config/supabase');
 
+// ==================== UTILIDAD: FECHA DE GUATEMALA ====================
+// Guatemala está en GMT-6 (sin cambio de horario)
+const getGuatemalaDate = () => {
+    const now = new Date();
+    // Convertir a hora de Guatemala (GMT-6)
+    const guatemalaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Guatemala' }));
+    return guatemalaTime;
+};
+
+const getGuatemalaDateString = () => {
+    return getGuatemalaDate().toISOString().split('T')[0];
+};
+
 // ==================== DASHBOARD COMPLETO ====================
 
 // Obtener todos los datos del dashboard
@@ -16,7 +29,9 @@ const getDashboardData = async (req, res) => {
             totalMora,
             incomeByPaymentMethod,
             monthlyIncome,
-            dailyIncome
+            dailyIncome,
+            rangeIncome,
+            currentMonthIncome
         ] = await Promise.all([
             getIncomeByDayData(start, end),
             getIncomeByMonthData(start, end),
@@ -26,7 +41,9 @@ const getDashboardData = async (req, res) => {
             getTotalMoraData(start, end),
             getIncomeByPaymentMethodData(start, end),
             getMonthlyIncomeData(start, end),
-            getDailyIncomeData()
+            getDailyIncomeData(start), // Pasa la fecha de inicio para el día específico
+            getRangeIncomeData(start, end), // Nueva función para ingresos del rango
+            getCurrentMonthIncomeData() // Nueva función para ingresos del mes actual
         ]);
 
         res.status(200).json({
@@ -38,7 +55,9 @@ const getDashboardData = async (req, res) => {
             totalMora: totalMora.total_mora || 0,
             incomeByPaymentMethod,
             monthlyIncome: monthlyIncome.total_ingresos || 0,
-            dailyIncome: dailyIncome.total_ingresos || 0
+            dailyIncome: dailyIncome.total_ingresos || 0,
+            rangeIncome: rangeIncome.total_ingresos || 0,
+            currentMonthIncome: currentMonthIncome.total_ingresos || 0
         });
     } catch (error) {
         console.error('Error en getDashboardData:', error);
@@ -50,6 +69,7 @@ const getDashboardData = async (req, res) => {
 const getIncomeByDayData = async (start, end) => {
     try {
         const ingresosPorDia = {};
+        const processedPaymentIds = new Set(); // Prevenir duplicados
         
         // Tablas de pago a consultar
         const tablasPago = [
@@ -70,7 +90,7 @@ const getIncomeByDayData = async (start, end) => {
             try {
                 let query = supabase
                     .from(config.tabla)
-                    .select(`created_at, ${config.campo}`);
+                    .select(`id, created_at, ${config.campo}`);
                 
                 // Aplicar filtro de fechas si se proporcionan
                 if (start && end) {
@@ -81,15 +101,25 @@ const getIncomeByDayData = async (start, end) => {
                 
                 if (data) {
                     data.forEach(pago => {
-                        const fecha = pago.created_at || new Date().toISOString();
-                        const dia = fecha.split('T')[0];
-                        if (dia) {
-                            ingresosPorDia[dia] = (ingresosPorDia[dia] || 0) + parseFloat(pago[config.campo] || 0);
+                        // ✓ Prevenir duplicados
+                        const uniqueId = `${config.tabla}_${pago.id}`;
+                        if (!processedPaymentIds.has(uniqueId)) {
+                            processedPaymentIds.add(uniqueId);
+                            
+                            const fecha = pago.created_at || new Date().toISOString();
+                            const dia = fecha.split('T')[0];
+                            if (dia) {
+                                // ✓ Validar NaN
+                                const monto = parseFloat(pago[config.campo]);
+                                if (!isNaN(monto) && monto > 0) {
+                                    ingresosPorDia[dia] = (ingresosPorDia[dia] || 0) + monto;
+                                }
+                            }
                         }
                     });
                 }
             } catch (err) {
-                // Tabla no existe
+                console.warn(`Tabla ${config.tabla} no encontrada:`, err.message);
             }
         }
         
@@ -107,6 +137,7 @@ const getIncomeByDayData = async (start, end) => {
 const getIncomeByMonthData = async (start, end) => {
     try {
         const ingresosPorMes = {};
+        const processedPaymentIds = new Set(); // Prevenir duplicados
         
         // Tablas de pago a consultar
         const tablasPago = [
@@ -127,7 +158,7 @@ const getIncomeByMonthData = async (start, end) => {
             try {
                 let query = supabase
                     .from(config.tabla)
-                    .select(`created_at, ${config.campo}`);
+                    .select(`id, created_at, ${config.campo}`);
                 
                 // Aplicar filtro de fechas si se proporcionan
                 if (start && end) {
@@ -138,13 +169,23 @@ const getIncomeByMonthData = async (start, end) => {
                 
                 if (data) {
                     data.forEach(pago => {
-                        const fecha = pago.created_at || new Date().toISOString();
-                        const mes = fecha.substring(0, 7); // YYYY-MM
-                        ingresosPorMes[mes] = (ingresosPorMes[mes] || 0) + parseFloat(pago[config.campo] || 0);
+                        // ✓ Prevenir duplicados
+                        const uniqueId = `${config.tabla}_${pago.id}`;
+                        if (!processedPaymentIds.has(uniqueId)) {
+                            processedPaymentIds.add(uniqueId);
+                            
+                            const fecha = pago.created_at || new Date().toISOString();
+                            const mes = fecha.substring(0, 7); // YYYY-MM
+                            // ✓ Validar NaN
+                            const monto = parseFloat(pago[config.campo]);
+                            if (!isNaN(monto) && monto > 0) {
+                                ingresosPorMes[mes] = (ingresosPorMes[mes] || 0) + monto;
+                            }
+                        }
                     });
                 }
             } catch (err) {
-                // Tabla no existe
+                console.warn(`Tabla ${config.tabla} no encontrada:`, err.message);
             }
         }
         
@@ -451,8 +492,9 @@ const getIncomeByPaymentMethodData = async (start, end) => {
 const getMonthlyIncomeData = async (start, end) => {
     try {
         let total_ingresos = 0;
+        const processedPaymentIds = new Set(); // Prevenir duplicados
         
-        // Tablas de pago a consultar - SIN FILTRO DE FECHA para incluir TODOS los pagos
+        // Tablas de pago a consultar - CON FILTRO DE FECHA
         const tablasPago = [
             { tabla: 'pago_colegiaturas', campo: 'total_pagado' },
             { tabla: 'pago_inscripcion', campo: 'monto_adelanto' },
@@ -466,20 +508,37 @@ const getMonthlyIncomeData = async (start, end) => {
             { tabla: 'course_payments', campo: 'amount' }
         ];
         
-        // Sumar de todas las tablas
+        // Sumar de todas las tablas CON filtro de fecha
         for (const config of tablasPago) {
             try {
-                const { data } = await supabase
+                let query = supabase
                     .from(config.tabla)
-                    .select(config.campo);
+                    .select(`id, created_at, ${config.campo}`);
+                
+                // ✓ APLICAR FILTRO DE FECHA si se proporciona
+                if (start && end) {
+                    query = query.gte('created_at', start).lte('created_at', end);
+                }
+                
+                const { data } = await query;
                 
                 if (data) {
-                    total_ingresos += data.reduce((sum, pago) => {
-                        return sum + parseFloat(pago[config.campo] || 0);
-                    }, 0);
+                    data.forEach(pago => {
+                        // ✓ Prevenir duplicados usando ID único
+                        const uniqueId = `${config.tabla}_${pago.id}`;
+                        if (!processedPaymentIds.has(uniqueId)) {
+                            processedPaymentIds.add(uniqueId);
+                            
+                            // ✓ Validar que sea un número válido
+                            const monto = parseFloat(pago[config.campo]);
+                            if (!isNaN(monto) && monto > 0) {
+                                total_ingresos += monto;
+                            }
+                        }
+                    });
                 }
             } catch (err) {
-                // Tabla no existe, continuar con la siguiente
+                console.warn(`Tabla ${config.tabla} no encontrada o error:`, err.message);
             }
         }
         
@@ -491,10 +550,11 @@ const getMonthlyIncomeData = async (start, end) => {
 };
 
 // Función auxiliar: Ingresos del día actual
-const getDailyIncomeData = async () => {
+const getDailyIncomeData = async (fecha = null) => {
     try {
         let total_ingresos = 0;
-        const hoy = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const processedPaymentIds = new Set(); // Prevenir duplicados
+        const targetDate = fecha || getGuatemalaDateString(); // Usar fecha proporcionada o hoy de Guatemala
         
         // Tablas de pago a consultar
         const tablasPago = [
@@ -510,22 +570,32 @@ const getDailyIncomeData = async () => {
             { tabla: 'course_payments', campo: 'amount' }
         ];
         
-        // Sumar de todas las tablas solo los pagos de hoy
+        // Sumar de todas las tablas solo los pagos de la fecha específica
         for (const config of tablasPago) {
             try {
                 const { data } = await supabase
                     .from(config.tabla)
-                    .select(`created_at, ${config.campo}`)
-                    .gte('created_at', hoy)
-                    .lt('created_at', `${hoy}T23:59:59`);
+                    .select(`id, created_at, ${config.campo}`)
+                    .gte('created_at', targetDate)
+                    .lt('created_at', `${targetDate}T23:59:59`);
                 
                 if (data) {
-                    total_ingresos += data.reduce((sum, pago) => {
-                        return sum + parseFloat(pago[config.campo] || 0);
-                    }, 0);
+                    data.forEach(pago => {
+                        // ✓ Prevenir duplicados
+                        const uniqueId = `${config.tabla}_${pago.id}`;
+                        if (!processedPaymentIds.has(uniqueId)) {
+                            processedPaymentIds.add(uniqueId);
+                            
+                            // ✓ Validar NaN
+                            const monto = parseFloat(pago[config.campo]);
+                            if (!isNaN(monto) && monto > 0) {
+                                total_ingresos += monto;
+                            }
+                        }
+                    });
                 }
             } catch (err) {
-                // Tabla no existe, continuar con la siguiente
+                console.warn(`Tabla ${config.tabla} no encontrada:`, err.message);
             }
         }
         
@@ -536,11 +606,118 @@ const getDailyIncomeData = async () => {
     }
 };
 
+// Obtener ingresos de un rango de fechas
+const getRangeIncomeData = async (startDate, endDate) => {
+    try {
+        let total_ingresos = 0;
+        const processedPaymentIds = new Set();
+        
+        const tablasPago = [
+            { tabla: 'pago_colegiaturas', campo: 'total_pagado' },
+            { tabla: 'pago_inscripcion', campo: 'monto_adelanto' },
+            { tabla: 'pago_uniforme', campo: 'monto_adelanto' },
+            { tabla: 'pago_libros_lectura', campo: 'monto_adelanto' },
+            { tabla: 'pago_copias_anuales', campo: 'monto_adelanto' },
+            { tabla: 'pago_libro_ingles', campo: 'monto_adelanto' },
+            { tabla: 'pago_excursion', campo: 'monto_adelanto' },
+            { tabla: 'pago_especialidad', campo: 'monto_adelanto' },
+            { tabla: 'graduation_payments', campo: 'paid_amount' },
+            { tabla: 'course_payments', campo: 'amount' }
+        ];
+        
+        for (const config of tablasPago) {
+            try {
+                const { data } = await supabase
+                    .from(config.tabla)
+                    .select(`id, created_at, ${config.campo}`)
+                    .gte('created_at', startDate)
+                    .lte('created_at', `${endDate}T23:59:59`);
+                
+                if (data) {
+                    data.forEach(pago => {
+                        const uniqueId = `${config.tabla}_${pago.id}`;
+                        if (!processedPaymentIds.has(uniqueId)) {
+                            processedPaymentIds.add(uniqueId);
+                            const monto = parseFloat(pago[config.campo]);
+                            if (!isNaN(monto) && monto > 0) {
+                                total_ingresos += monto;
+                            }
+                        }
+                    });
+                }
+            } catch (err) {
+                console.warn(`Tabla ${config.tabla} no encontrada:`, err.message);
+            }
+        }
+        
+        return { total_ingresos };
+    } catch (error) {
+        console.error('Error en getRangeIncomeData:', error);
+        return { total_ingresos: 0 };
+    }
+};
+
+// Obtener ingresos del mes actual completo (independiente de filtros)
+const getCurrentMonthIncomeData = async () => {
+    try {
+        let total_ingresos = 0;
+        const processedPaymentIds = new Set();
+        
+        // Obtener primer y último día del mes actual (Guatemala)
+        const hoy = getGuatemalaDate();
+        const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
+        const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().split('T')[0];
+        
+        const tablasPago = [
+            { tabla: 'pago_colegiaturas', campo: 'total_pagado' },
+            { tabla: 'pago_inscripcion', campo: 'monto_adelanto' },
+            { tabla: 'pago_uniforme', campo: 'monto_adelanto' },
+            { tabla: 'pago_libros_lectura', campo: 'monto_adelanto' },
+            { tabla: 'pago_copias_anuales', campo: 'monto_adelanto' },
+            { tabla: 'pago_libro_ingles', campo: 'monto_adelanto' },
+            { tabla: 'pago_excursion', campo: 'monto_adelanto' },
+            { tabla: 'pago_especialidad', campo: 'monto_adelanto' },
+            { tabla: 'graduation_payments', campo: 'paid_amount' },
+            { tabla: 'course_payments', campo: 'amount' }
+        ];
+        
+        for (const config of tablasPago) {
+            try {
+                const { data } = await supabase
+                    .from(config.tabla)
+                    .select(`id, created_at, ${config.campo}`)
+                    .gte('created_at', primerDiaMes)
+                    .lte('created_at', `${ultimoDiaMes}T23:59:59`);
+                
+                if (data) {
+                    data.forEach(pago => {
+                        const uniqueId = `${config.tabla}_${pago.id}`;
+                        if (!processedPaymentIds.has(uniqueId)) {
+                            processedPaymentIds.add(uniqueId);
+                            const monto = parseFloat(pago[config.campo]);
+                            if (!isNaN(monto) && monto > 0) {
+                                total_ingresos += monto;
+                            }
+                        }
+                    });
+                }
+            } catch (err) {
+                console.warn(`Tabla ${config.tabla} no encontrada:`, err.message);
+            }
+        }
+        
+        return { total_ingresos };
+    } catch (error) {
+        console.error('Error en getCurrentMonthIncomeData:', error);
+        return { total_ingresos: 0 };
+    }
+};
+
 // Obtener ingresos del día
 const getIngresosDia = async (req, res) => {
     try {
         const data = await getIncomeByDayData();
-        const hoy = new Date().toISOString().split('T')[0];
+        const hoy = getGuatemalaDateString();
         const ingresoHoy = data.find(item => item.dia === hoy) || { total_ingresos: 0 };
         
         res.status(200).json({ 
@@ -1082,20 +1259,23 @@ const getDetalleColegiaturas = async (start, end) => {
         const methodsMap = methods ? Object.fromEntries(methods.map(m => [m.id, m.name])) : {};
 
         // Obtener estudiantes
-        const studentIds = [...new Set(data.map(p => p.estudiante_id).filter(Boolean))];
+        const studentIds = [...new Set(data.map(p => p.student_id).filter(Boolean))];
         const { data: students } = await supabase
-            .from('estudiantes')
-            .select('id, nombres, apellidos')
+            .from('students')
+            .select('id, nombre, apellidos')
             .in('id', studentIds);
-        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombres} ${s.apellidos}`])) : {};
+        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombre} ${s.apellidos}`])) : {};
 
-        return data.map(p => ({
-            estudiante: studentsMap[p.estudiante_id] || 'N/A',
-            mes: p.mes_pagado || 'N/A',
-            fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
-            metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
-            monto: parseFloat(p.total_pagado || 0)
-        }));
+        return data.map(p => {
+            const monto = parseFloat(p.total_pagado);
+            return {
+                estudiante: studentsMap[p.student_id] || 'N/A',
+                mes: p.mes_pagado || 'N/A',
+                fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
+                metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
+                monto: !isNaN(monto) ? monto : 0
+            };
+        });
     } catch (error) {
         console.error('Error en getDetalleColegiaturas:', error);
         return [];
@@ -1118,19 +1298,22 @@ const getDetalleInscripciones = async (start, end) => {
         const { data: methods } = await supabase.from('payment_methods').select('*');
         const methodsMap = methods ? Object.fromEntries(methods.map(m => [m.id, m.name])) : {};
 
-        const studentIds = [...new Set(data.map(p => p.estudiante_id).filter(Boolean))];
+        const studentIds = [...new Set(data.map(p => p.student_id).filter(Boolean))];
         const { data: students } = await supabase
-            .from('estudiantes')
-            .select('id, nombres, apellidos')
+            .from('students')
+            .select('id, nombre, apellidos')
             .in('id', studentIds);
-        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombres} ${s.apellidos}`])) : {};
+        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombre} ${s.apellidos}`])) : {};
 
-        return data.map(p => ({
-            estudiante: studentsMap[p.estudiante_id] || 'N/A',
-            fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
-            metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
-            monto: parseFloat(p.monto_adelanto || 0)
-        }));
+        return data.map(p => {
+            const monto = parseFloat(p.monto_adelanto);
+            return {
+                estudiante: studentsMap[p.student_id] || 'N/A',
+                fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
+                metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
+                monto: !isNaN(monto) ? monto : 0
+            };
+        });
     } catch (error) {
         console.error('Error en getDetalleInscripciones:', error);
         return [];
@@ -1153,19 +1336,22 @@ const getDetalleUniformes = async (start, end) => {
         const { data: methods } = await supabase.from('payment_methods').select('*');
         const methodsMap = methods ? Object.fromEntries(methods.map(m => [m.id, m.name])) : {};
 
-        const studentIds = [...new Set(data.map(p => p.estudiante_id).filter(Boolean))];
+        const studentIds = [...new Set(data.map(p => p.student_id).filter(Boolean))];
         const { data: students } = await supabase
-            .from('estudiantes')
-            .select('id, nombres, apellidos')
+            .from('students')
+            .select('id, nombre, apellidos')
             .in('id', studentIds);
-        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombres} ${s.apellidos}`])) : {};
+        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombre} ${s.apellidos}`])) : {};
 
-        return data.map(p => ({
-            estudiante: studentsMap[p.estudiante_id] || 'N/A',
-            fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
-            metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
-            monto: parseFloat(p.monto_adelanto || 0)
-        }));
+        return data.map(p => {
+            const monto = parseFloat(p.monto_adelanto);
+            return {
+                estudiante: studentsMap[p.student_id] || 'N/A',
+                fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
+                metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
+                monto: !isNaN(monto) ? monto : 0
+            };
+        });
     } catch (error) {
         console.error('Error en getDetalleUniformes:', error);
         return [];
@@ -1184,19 +1370,22 @@ const getDetalleLibrosLectura = async (start, end) => {
         const { data: methods } = await supabase.from('payment_methods').select('*');
         const methodsMap = methods ? Object.fromEntries(methods.map(m => [m.id, m.name])) : {};
 
-        const studentIds = [...new Set(data.map(p => p.estudiante_id).filter(Boolean))];
+        const studentIds = [...new Set(data.map(p => p.student_id).filter(Boolean))];
         const { data: students } = await supabase
-            .from('estudiantes')
-            .select('id, nombres, apellidos')
+            .from('students')
+            .select('id, nombre, apellidos')
             .in('id', studentIds);
-        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombres} ${s.apellidos}`])) : {};
+        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombre} ${s.apellidos}`])) : {};
 
-        return data.map(p => ({
-            estudiante: studentsMap[p.estudiante_id] || 'N/A',
-            fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
-            metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
-            monto: parseFloat(p.monto_adelanto || 0)
-        }));
+        return data.map(p => {
+            const monto = parseFloat(p.monto_adelanto);
+            return {
+                estudiante: studentsMap[p.student_id] || 'N/A',
+                fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
+                metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
+                monto: !isNaN(monto) ? monto : 0
+            };
+        });
     } catch (error) {
         console.error('Error en getDetalleLibrosLectura:', error);
         return [];
@@ -1215,19 +1404,22 @@ const getDetalleCopiasAnuales = async (start, end) => {
         const { data: methods } = await supabase.from('payment_methods').select('*');
         const methodsMap = methods ? Object.fromEntries(methods.map(m => [m.id, m.name])) : {};
 
-        const studentIds = [...new Set(data.map(p => p.estudiante_id).filter(Boolean))];
+        const studentIds = [...new Set(data.map(p => p.student_id).filter(Boolean))];
         const { data: students } = await supabase
-            .from('estudiantes')
-            .select('id, nombres, apellidos')
+            .from('students')
+            .select('id, nombre, apellidos')
             .in('id', studentIds);
-        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombres} ${s.apellidos}`])) : {};
+        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombre} ${s.apellidos}`])) : {};
 
-        return data.map(p => ({
-            estudiante: studentsMap[p.estudiante_id] || 'N/A',
-            fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
-            metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
-            monto: parseFloat(p.monto_adelanto || 0)
-        }));
+        return data.map(p => {
+            const monto = parseFloat(p.monto_adelanto);
+            return {
+                estudiante: studentsMap[p.student_id] || 'N/A',
+                fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
+                metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
+                monto: !isNaN(monto) ? monto : 0
+            };
+        });
     } catch (error) {
         console.error('Error en getDetalleCopiasAnuales:', error);
         return [];
@@ -1246,19 +1438,22 @@ const getDetalleLibroIngles = async (start, end) => {
         const { data: methods } = await supabase.from('payment_methods').select('*');
         const methodsMap = methods ? Object.fromEntries(methods.map(m => [m.id, m.name])) : {};
 
-        const studentIds = [...new Set(data.map(p => p.estudiante_id).filter(Boolean))];
+        const studentIds = [...new Set(data.map(p => p.student_id).filter(Boolean))];
         const { data: students } = await supabase
-            .from('estudiantes')
-            .select('id, nombres, apellidos')
+            .from('students')
+            .select('id, nombre, apellidos')
             .in('id', studentIds);
-        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombres} ${s.apellidos}`])) : {};
+        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombre} ${s.apellidos}`])) : {};
 
-        return data.map(p => ({
-            estudiante: studentsMap[p.estudiante_id] || 'N/A',
-            fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
-            metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
-            monto: parseFloat(p.monto_adelanto || 0)
-        }));
+        return data.map(p => {
+            const monto = parseFloat(p.monto_adelanto);
+            return {
+                estudiante: studentsMap[p.student_id] || 'N/A',
+                fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
+                metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
+                monto: !isNaN(monto) ? monto : 0
+            };
+        });
     } catch (error) {
         console.error('Error en getDetalleLibroIngles:', error);
         return [];
@@ -1277,19 +1472,22 @@ const getDetalleExcursion = async (start, end) => {
         const { data: methods } = await supabase.from('payment_methods').select('*');
         const methodsMap = methods ? Object.fromEntries(methods.map(m => [m.id, m.name])) : {};
 
-        const studentIds = [...new Set(data.map(p => p.estudiante_id).filter(Boolean))];
+        const studentIds = [...new Set(data.map(p => p.student_id).filter(Boolean))];
         const { data: students } = await supabase
-            .from('estudiantes')
-            .select('id, nombres, apellidos')
+            .from('students')
+            .select('id, nombre, apellidos')
             .in('id', studentIds);
-        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombres} ${s.apellidos}`])) : {};
+        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombre} ${s.apellidos}`])) : {};
 
-        return data.map(p => ({
-            estudiante: studentsMap[p.estudiante_id] || 'N/A',
-            fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
-            metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
-            monto: parseFloat(p.monto_adelanto || 0)
-        }));
+        return data.map(p => {
+            const monto = parseFloat(p.monto_adelanto);
+            return {
+                estudiante: studentsMap[p.student_id] || 'N/A',
+                fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
+                metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
+                monto: !isNaN(monto) ? monto : 0
+            };
+        });
     } catch (error) {
         console.error('Error en getDetalleExcursion:', error);
         return [];
@@ -1308,19 +1506,22 @@ const getDetalleEspecialidad = async (start, end) => {
         const { data: methods } = await supabase.from('payment_methods').select('*');
         const methodsMap = methods ? Object.fromEntries(methods.map(m => [m.id, m.name])) : {};
 
-        const studentIds = [...new Set(data.map(p => p.estudiante_id).filter(Boolean))];
+        const studentIds = [...new Set(data.map(p => p.student_id).filter(Boolean))];
         const { data: students } = await supabase
-            .from('estudiantes')
-            .select('id, nombres, apellidos')
+            .from('students')
+            .select('id, nombre, apellidos')
             .in('id', studentIds);
-        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombres} ${s.apellidos}`])) : {};
+        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombre} ${s.apellidos}`])) : {};
 
-        return data.map(p => ({
-            estudiante: studentsMap[p.estudiante_id] || 'N/A',
-            fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
-            metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
-            monto: parseFloat(p.monto_adelanto || 0)
-        }));
+        return data.map(p => {
+            const monto = parseFloat(p.monto_adelanto);
+            return {
+                estudiante: studentsMap[p.student_id] || 'N/A',
+                fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
+                metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
+                monto: !isNaN(monto) ? monto : 0
+            };
+        });
     } catch (error) {
         console.error('Error en getDetalleEspecialidad:', error);
         return [];
@@ -1339,19 +1540,22 @@ const getDetalleGraduaciones = async (start, end) => {
         const { data: methods } = await supabase.from('payment_methods').select('*');
         const methodsMap = methods ? Object.fromEntries(methods.map(m => [m.id, m.name])) : {};
 
-        const studentIds = [...new Set(data.map(p => p.estudiante_id).filter(Boolean))];
+        const studentIds = [...new Set(data.map(p => p.student_id).filter(Boolean))];
         const { data: students } = await supabase
-            .from('estudiantes')
-            .select('id, nombres, apellidos')
+            .from('students')
+            .select('id, nombre, apellidos')
             .in('id', studentIds);
-        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombres} ${s.apellidos}`])) : {};
+        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombre} ${s.apellidos}`])) : {};
 
-        return data.map(p => ({
-            estudiante: studentsMap[p.estudiante_id] || 'N/A',
-            fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
-            metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
-            monto: parseFloat(p.paid_amount || 0)
-        }));
+        return data.map(p => {
+            const monto = parseFloat(p.paid_amount);
+            return {
+                estudiante: studentsMap[p.student_id] || 'N/A',
+                fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
+                metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
+                monto: !isNaN(monto) ? monto : 0
+            };
+        });
     } catch (error) {
         console.error('Error en getDetalleGraduaciones:', error);
         return [];
@@ -1370,12 +1574,12 @@ const getDetalleCursosExtra = async (start, end) => {
         const { data: methods } = await supabase.from('payment_methods').select('*');
         const methodsMap = methods ? Object.fromEntries(methods.map(m => [m.id, m.name])) : {};
 
-        const studentIds = [...new Set(data.map(p => p.estudiante_id).filter(Boolean))];
+        const studentIds = [...new Set(data.map(p => p.student_id).filter(Boolean))];
         const { data: students } = await supabase
-            .from('estudiantes')
-            .select('id, nombres, apellidos')
+            .from('students')
+            .select('id, nombre, apellidos')
             .in('id', studentIds);
-        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombres} ${s.apellidos}`])) : {};
+        const studentsMap = students ? Object.fromEntries(students.map(s => [s.id, `${s.nombre} ${s.apellidos}`])) : {};
 
         const courseIds = [...new Set(data.map(p => p.curso_id).filter(Boolean))];
         const { data: courses } = await supabase
@@ -1384,13 +1588,16 @@ const getDetalleCursosExtra = async (start, end) => {
             .in('id', courseIds);
         const coursesMap = courses ? Object.fromEntries(courses.map(c => [c.id, c.nombre])) : {};
 
-        return data.map(p => ({
-            estudiante: studentsMap[p.estudiante_id] || 'N/A',
-            curso: coursesMap[p.curso_id] || 'N/A',
-            fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
-            metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
-            monto: parseFloat(p.amount || 0)
-        }));
+        return data.map(p => {
+            const monto = parseFloat(p.amount);
+            return {
+                estudiante: studentsMap[p.student_id] || 'N/A',
+                curso: coursesMap[p.curso_id] || 'N/A',
+                fecha: p.created_at ? new Date(p.created_at).toLocaleDateString('es-GT') : 'N/A',
+                metodo_pago: methodsMap[p.payment_method_id] || 'N/A',
+                monto: !isNaN(monto) ? monto : 0
+            };
+        });
     } catch (error) {
         console.error('Error en getDetalleCursosExtra:', error);
         return [];
