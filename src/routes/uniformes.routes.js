@@ -9,7 +9,11 @@ const {
     eliminarTalla,
     getUniformReports,
     exportUniformReportExcel,
-    obtenerReporteInventarioTallas
+    obtenerReporteInventarioTallas,
+    crearOrdenUniforme,
+    obtenerOrdenesEstudiante,
+    registrarPagoOrden,
+    obtenerOrden
 } = require('../controllers/uniformes.controller');
 
 // GET - Buscar estudiantes por nombre
@@ -39,5 +43,18 @@ router.get('/export-excel', exportUniformReportExcel);
 
 // GET - Obtener reporte de inventario de tallas por categoría
 router.get('/inventario-tallas', obtenerReporteInventarioTallas);
+
+// ==================== ÓRDENES DE UNIFORMES ====================
+// POST - Crear una nueva orden de uniforme
+router.post('/ordenes', crearOrdenUniforme);
+
+// GET - Obtener todas las órdenes de un estudiante
+router.get('/ordenes/estudiante/:studentId', obtenerOrdenesEstudiante);
+
+// GET - Obtener una orden específica con sus pagos
+router.get('/ordenes/:orderId', obtenerOrden);
+
+// POST - Registrar un pago para una orden
+router.post('/ordenes/:orderId/pagos', registrarPagoOrden);
 
 module.exports = router;

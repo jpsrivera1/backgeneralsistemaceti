@@ -602,6 +602,221 @@ const obtenerReporteInventarioTallas = async (req, res) => {
     }
 };
 
+// ==================== ÓRDENES DE UNIFORMES ====================
+
+// Crear una nueva orden de uniforme
+const crearOrdenUniforme = async (req, res) => {
+    try {
+        const { student_id, descripcion, total_amount } = req.body;
+
+        if (!student_id || !total_amount) {
+            return res.status(400).json({ error: 'Se requiere student_id y total_amount' });
+        }
+
+        const { data, error } = await supabase
+            .from('uniform_orders')
+            .insert({
+                student_id,
+                descripcion: descripcion || 'Orden de uniforme',
+                total_amount: parseFloat(total_amount),
+                paid_amount: 0,
+                estado: 'ABIERTO'
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.status(201).json({
+            success: true,
+            message: 'Orden creada exitosamente',
+            data: data
+        });
+    } catch (error) {
+        console.error('Error en crearOrdenUniforme:', error);
+        res.status(500).json({ error: 'Error al crear orden de uniforme' });
+    }
+};
+
+// Obtener todas las órdenes de un estudiante
+const obtenerOrdenesEstudiante = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+
+        const { data, error } = await supabase
+            .from('uniform_orders')
+            .select(`
+                id,
+                descripcion,
+                total_amount,
+                paid_amount,
+                pending_amount,
+                estado,
+                created_at,
+                uniform_order_payments (
+                    id,
+                    amount,
+                    payment_date,
+                    payment_method_id,
+                    payment_methods (
+                        id,
+                        name
+                    )
+                )
+            `)
+            .eq('student_id', studentId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        res.status(200).json({
+            success: true,
+            data: data
+        });
+    } catch (error) {
+        console.error('Error en obtenerOrdenesEstudiante:', error);
+        res.status(500).json({ error: 'Error al obtener órdenes' });
+    }
+};
+
+// Registrar un pago para una orden
+const registrarPagoOrden = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        const { amount, payment_method_id } = req.body;
+
+        if (!amount || parseFloat(amount) <= 0) {
+            return res.status(400).json({ error: 'El monto debe ser mayor a 0' });
+        }
+
+        // Verificar que la orden existe y está abierta
+        const { data: orden, error: errorOrden } = await supabase
+            .from('uniform_orders')
+            .select('id, total_amount, paid_amount, pending_amount, estado, student_id')
+            .eq('id', orderId)
+            .single();
+
+        if (errorOrden) {
+            return res.status(404).json({ error: 'Orden no encontrada' });
+        }
+
+        if (orden.estado === 'CERRADO') {
+            return res.status(400).json({ error: 'Esta orden ya está completamente pagada' });
+        }
+
+        const montoPago = parseFloat(amount);
+        if (montoPago > parseFloat(orden.pending_amount)) {
+            return res.status(400).json({ 
+                error: 'El pago excede el monto pendiente',
+                pendiente: orden.pending_amount
+            });
+        }
+
+        // Obtener datos del estudiante
+        const { data: estudiante } = await supabase
+            .from('students')
+            .select('nombre, apellidos, grado')
+            .eq('id', orden.student_id)
+            .single();
+
+        // Obtener nombre del método de pago
+        let metodo_pago_nombre = 'N/A';
+        if (payment_method_id) {
+            const { data: metodoPago } = await supabase
+                .from('payment_methods')
+                .select('name')
+                .eq('id', payment_method_id)
+                .single();
+            if (metodoPago) metodo_pago_nombre = metodoPago.name;
+        }
+
+        // Registrar el pago (el trigger se encargará de actualizar la orden)
+        const { data: pago, error } = await supabase
+            .from('uniform_order_payments')
+            .insert({
+                order_id: orderId,
+                amount: montoPago,
+                payment_method_id: payment_method_id || null
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        // Obtener la orden actualizada
+        const { data: ordenActualizada } = await supabase
+            .from('uniform_orders')
+            .select('*')
+            .eq('id', orderId)
+            .single();
+
+        res.status(201).json({
+            success: true,
+            message: 'Pago registrado exitosamente',
+            data: {
+                pago: pago,
+                orden: ordenActualizada,
+                estudiante: estudiante,
+                metodo_pago: metodo_pago_nombre,
+                numeroRecibo: `UO-${pago.id.slice(0, 8).toUpperCase()}`
+            }
+        });
+    } catch (error) {
+        console.error('Error en registrarPagoOrden:', error);
+        res.status(500).json({ error: 'Error al registrar pago' });
+    }
+};
+
+// Obtener una orden específica con sus pagos
+const obtenerOrden = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+
+        const { data, error } = await supabase
+            .from('uniform_orders')
+            .select(`
+                id,
+                student_id,
+                descripcion,
+                total_amount,
+                paid_amount,
+                pending_amount,
+                estado,
+                created_at,
+                students (
+                    id,
+                    nombre,
+                    apellidos,
+                    grado
+                ),
+                uniform_order_payments (
+                    id,
+                    amount,
+                    payment_date,
+                    payment_method_id,
+                    payment_methods (
+                        id,
+                        name
+                    )
+                )
+            `)
+            .eq('id', orderId)
+            .single();
+
+        if (error) {
+            return res.status(404).json({ error: 'Orden no encontrada' });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: data
+        });
+    } catch (error) {
+        console.error('Error en obtenerOrden:', error);
+        res.status(500).json({ error: 'Error al obtener orden' });
+    }
+};
+
 module.exports = {
     obtenerCategorias,
     obtenerCategoriaEstudiante,
@@ -611,5 +826,9 @@ module.exports = {
     eliminarTalla,
     getUniformReports,
     exportUniformReportExcel,
-    obtenerReporteInventarioTallas
+    obtenerReporteInventarioTallas,
+    crearOrdenUniforme,
+    obtenerOrdenesEstudiante,
+    registrarPagoOrden,
+    obtenerOrden
 };
