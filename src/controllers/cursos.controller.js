@@ -1,15 +1,18 @@
 const supabase = require('../config/supabase');
 
-// Calcular mora (solo de febrero a octubre, si el día actual es mayor a 5)
+// Calcular mora (solo de marzo a octubre, si el día actual es mayor a 5)
 const calcularMora = (mesId = 0) => {
     const fechaActual = new Date();
+    const mesActual = fechaActual.getMonth() + 1;
     const diaActual = fechaActual.getDate();
     
     // El mes_id corresponde directamente al número del mes (1=Enero, 2=Febrero, etc.)
     const mesPagar = parseInt(mesId) || 0;
     
-    // Solo aplicar mora de febrero (2) a octubre (10) y después del día 5
-    if (mesPagar >= 2 && mesPagar <= 10 && diaActual > 5) {
+    // Solo aplicar mora de marzo (3) a octubre (10)
+    // Aplicar mora solo si estamos en el mes que se está pagando y después del día 5
+    // O si ya pasó el mes que se está pagando
+    if (mesPagar >= 3 && mesPagar <= 10 && (mesActual > mesPagar || (mesActual === mesPagar && diaActual > 5))) {
         return 30.00;
     }
     return 0.00;
