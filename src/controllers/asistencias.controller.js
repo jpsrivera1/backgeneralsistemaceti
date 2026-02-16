@@ -320,67 +320,124 @@ const registrarAsistencia = async (req, res) => {
 
         // Si es DOCENTE
         if (docente) {
-            // Verificar si ya marcó hoy
-            const { data: yaMarco } = await supabase
+            // Verificar si ya marcó ENTRADA hoy
+            const { data: registroHoy } = await supabase
                 .from('teacher_attendance')
                 .select('*')
                 .eq('teacher_id', docente.id)
                 .eq('fecha', fechaActualStr)
                 .single();
 
-            if (yaMarco) {
+            // Si NO hay registro de hoy → ENTRADA
+            if (!registroHoy) {
+                // Calcular estado para DOCENTES según jornada
+                const [horas, minutos] = horaActual.split(':').map(Number);
+                const minutosDesdeMedianoche = horas * 60 + minutos;
+                
+                let limite;
+                if (docente.jornada === 'Matutina') {
+                    limite = 7 * 60; // 7:00 AM en minutos (420 minutos)
+                } else if (docente.jornada === 'Vespertina') {
+                    limite = 13 * 60 + 10; // 1:10 PM en minutos (790 minutos)
+                }
+                
+                let estadoAsistencia = 'A_TIEMPO';
+                if (minutosDesdeMedianoche > limite) {
+                    estadoAsistencia = 'TARDE';
+                }
+
+                // Registrar ENTRADA de docente
+                const { data, error } = await supabase
+                    .from('teacher_attendance')
+                    .insert({
+                        teacher_id: docente.id,
+                        fecha: fechaActualStr,
+                        hora_marcaje: horaActual,
+                        fecha_hora_marcaje: getGuatemalaDate().toISOString(),
+                        estado: estadoAsistencia
+                    })
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                return res.status(201).json({
+                    message: 'ENTRADA registrada',
+                    tipo: 'docente',
+                    accion: 'entrada',
+                    persona: {
+                        id: docente.id,
+                        nombre: docente.nombre,
+                        jornada: docente.jornada
+                    },
+                    asistencia: data
+                });
+            }
+
+            // Si ya hay registro y YA TIENE SALIDA → Error ya completó su día
+            if (registroHoy.hora_salida) {
                 return res.status(400).json({ 
-                    error: 'Ya se registró asistencia hoy',
+                    error: 'Ya completaste tu jornada hoy',
+                    mensaje: `Entrada: ${registroHoy.hora_marcaje} | Salida: ${registroHoy.hora_salida}`,
                     tipo: 'docente',
                     persona: {
                         id: docente.id,
                         nombre: docente.nombre,
                         jornada: docente.jornada
                     },
-                    asistencia: yaMarco
+                    asistencia: registroHoy
                 });
             }
 
-            // Calcular estado para DOCENTES según jornada
-            const [horas, minutos] = horaActual.split(':').map(Number);
-            const minutosDesdeMedianoche = horas * 60 + minutos;
-            
-            let limite;
-            if (docente.jornada === 'Matutina') {
-                limite = 7 * 60; // 7:00 AM en minutos (420 minutos)
-            } else if (docente.jornada === 'Vespertina') {
-                limite = 13 * 60 + 10; // 1:10 PM en minutos (790 minutos)
-            }
-            
-            let estadoAsistencia = 'A_TIEMPO';
-            if (minutosDesdeMedianoche > limite) {
-                estadoAsistencia = 'TARDE';
+            // Si hay registro pero SIN SALIDA → MARCAR SALIDA
+            // Validación: debe haber pasado al menos 1 hora desde la entrada
+            const horaEntrada = new Date(`1970-01-01T${registroHoy.hora_marcaje}`);
+            const horaActualDate = new Date(`1970-01-01T${horaActual}`);
+            const diferenciaMs = horaActualDate - horaEntrada;
+            const diferenciaHoras = diferenciaMs / (1000 * 60 * 60);
+
+            if (diferenciaHoras < 1) {
+                const minutosRestantes = Math.ceil((1 - diferenciaHoras) * 60);
+                return res.status(400).json({ 
+                    error: 'Debes permanecer al menos 1 hora en el establecimiento',
+                    mensaje: `Faltan ${minutosRestantes} minuto(s) para poder marcar salida`,
+                    horaEntrada: registroHoy.hora_marcaje,
+                    horaActual: horaActual,
+                    tipo: 'docente',
+                    persona: {
+                        id: docente.id,
+                        nombre: docente.nombre,
+                        jornada: docente.jornada
+                    }
+                });
             }
 
-            // Registrar asistencia de docente
+            // Registrar SALIDA
             const { data, error } = await supabase
                 .from('teacher_attendance')
-                .insert({
-                    teacher_id: docente.id,
-                    fecha: fechaActualStr,
-                    hora_marcaje: horaActual,
-                    fecha_hora_marcaje: getGuatemalaDate().toISOString(),
-                    estado: estadoAsistencia
+                .update({
+                    hora_salida: horaActual,
+                    fecha_hora_salida: getGuatemalaDate().toISOString()
                 })
+                .eq('id', registroHoy.id)
                 .select()
                 .single();
 
             if (error) throw error;
 
-            return res.status(201).json({
-                message: 'Asistencia registrada',
+            return res.status(200).json({
+                message: 'SALIDA registrada correctamente',
                 tipo: 'docente',
+                accion: 'salida',
                 persona: {
                     id: docente.id,
                     nombre: docente.nombre,
                     jornada: docente.jornada
                 },
-                asistencia: data
+                asistencia: {
+                    ...data,
+                    tiempoEstadia: `${Math.floor(diferenciaHoras)} hora(s) ${Math.round((diferenciaHoras % 1) * 60)} minuto(s)`
+                }
             });
         }
 

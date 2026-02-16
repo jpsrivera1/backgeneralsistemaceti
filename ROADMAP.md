@@ -103,11 +103,72 @@ RegEstudiantes/
 
 ---
 
+## 🆕 Fase 6: Sistema de Entrada/Salida Docentes (Feb 2026)
+
+### Funcionalidades Implementadas
+- [x] **Registro de ENTRADA** (Primera marcada del día)
+  - [x] Validación de horario (A_TIEMPO / TARDE)
+  - [x] Límites por jornada (Matutina: 7:00 AM, Vespertina: 1:10 PM)
+  - [x] Solo una entrada por día
+
+- [x] **Registro de SALIDA** (Segunda marcada del día)
+  - [x] Validación de permanencia mínima: 1 hora
+  - [x] Bloqueo si no ha pasado 1 hora desde entrada
+  - [x] Muestra minutos restantes si intenta salir antes
+  - [x] Cálculo de tiempo de estadía
+
+- [x] **Cierre Automático a Medianoche**
+  - [x] Función SQL: `cerrar_asistencias_docentes_automatico()`
+  - [x] Registra salida a las 18:00 si docente no marcó
+  - [x] Se ejecuta automáticamente con Cron Job
+
+- [x] **Modificaciones en Base de Datos**
+  - [x] Agregado campo `hora_salida` en `teacher_attendance`
+  - [x] Agregado campo `fecha_hora_salida` en `teacher_attendance`
+  - [x] Script SQL: `sql-add-salida-docentes.sql`
+
+- [x] **Validaciones Implementadas**
+  - [x] No puede marcar salida sin entrada
+  - [x] No puede marcar salida antes de 1 hora
+  - [x] No puede marcar salida dos veces
+  - [x] Mensajes descriptivos para cada caso
+
+### Archivos Creados/Modificados
+- ✅ `sql-add-salida-docentes.sql` - Script de migración
+- ✅ `DOCUMENTACION-ENTRADA-SALIDA-DOCENTES.md` - Guía completa
+- ✅ `src/controllers/asistencias.controller.js` - Lógica entrada/salida
+
+### Endpoints API Docentes
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| POST | /api/asistencias/marcar | Marcar entrada O salida (detección automática) |
+
+### Respuestas del Sistema
+- **Entrada registrada** → Status 201
+- **Salida registrada** → Status 200
+- **Error: Menos de 1 hora** → Status 400 (con minutos restantes)
+- **Error: Ya completó jornada** → Status 400
+
+### Configuración Requerida
+1. Ejecutar `sql-add-salida-docentes.sql` en Supabase
+2. Configurar Cron Job en Supabase:
+   ```sql
+   SELECT cron.schedule(
+       'cerrar-asistencias-docentes',
+       '0 0 * * *',
+       'SELECT cerrar_asistencias_docentes_automatico();'
+   );
+   ```
+3. Desplegar backend actualizado en Render
+
+---
+
 ## ⚠️ Notas Importantes
 - Necesitas proporcionar tu `SUPABASE_URL` y `SUPABASE_KEY` para conectar
 - El servidor corre en el puerto 3000 por defecto
 - Asegúrate de tener una tabla `estudiantes` en tu base de datos Supabase
+- **NUEVO:** Configurar Cron Job en Supabase para cierre automático de asistencias
 
 ---
 
-*Última actualización: 4 de diciembre de 2025*
+*Última actualización: 15 de febrero de 2026*
