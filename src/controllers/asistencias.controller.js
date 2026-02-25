@@ -11,6 +11,11 @@ const getGuatemalaDateString = () => {
     return getGuatemalaDate().toISOString().split('T')[0];
 };
 
+// Obtener día de la semana en Guatemala (0=Domingo, 1=Lunes, ..., 6=Sábado)
+const getGuatemalaDayOfWeek = () => {
+    return getGuatemalaDate().getDay();
+};
+
 // Variable temporal para almacenar el último UID detectado
 let ultimoUIDDetectado = {
   uid: null,
@@ -256,6 +261,42 @@ const registrarAsistencia = async (req, res) => {
                 });
             }
 
+            // Validar día de la semana según jornada
+            const diaActual = getGuatemalaDayOfWeek(); // 0=Domingo, 1=Lunes, ..., 6=Sábado
+            
+            if (estudiante.jornada === 'Matutina' || estudiante.jornada === 'Vespertina') {
+                // Jornadas Matutina y Vespertina: Solo lunes a viernes (1-5)
+                if (diaActual === 0 || diaActual === 6) {
+                    return res.status(400).json({
+                        error: `La jornada ${estudiante.jornada} no tiene clases los ${diaActual === 0 ? 'domingos' : 'sábados'}`,
+                        tipo: 'estudiante',
+                        persona: {
+                            id: estudiante.id,
+                            nombre: estudiante.nombre,
+                            apellido: estudiante.apellidos,
+                            grado: estudiante.grado,
+                            jornada: estudiante.jornada
+                        }
+                    });
+                }
+            } else if (estudiante.jornada === 'Fin de semana') {
+                // Jornada Fin de semana: Solo domingos (0)
+                if (diaActual !== 0) {
+                    const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+                    return res.status(400).json({
+                        error: `La jornada Fin de semana solo tiene clases los domingos. Hoy es ${dias[diaActual]}`,
+                        tipo: 'estudiante',
+                        persona: {
+                            id: estudiante.id,
+                            nombre: estudiante.nombre,
+                            apellido: estudiante.apellidos,
+                            grado: estudiante.grado,
+                            jornada: estudiante.jornada
+                        }
+                    });
+                }
+            }
+
             // Calcular estado según jornada y hora
             const [horas, minutos] = horaActual.split(':').map(Number);
             const minutosDesdeMedianoche = horas * 60 + minutos;
@@ -342,6 +383,38 @@ const registrarAsistencia = async (req, res) => {
 
             // Si NO hay registro de hoy → ENTRADA
             if (!registroHoy) {
+                // Validar día de la semana según jornada
+                const diaActual = getGuatemalaDayOfWeek(); // 0=Domingo, 1=Lunes, ..., 6=Sábado
+                
+                if (docente.jornada === 'Matutina' || docente.jornada === 'Vespertina') {
+                    // Jornadas Matutina y Vespertina: Solo lunes a viernes (1-5)
+                    if (diaActual === 0 || diaActual === 6) {
+                        return res.status(400).json({
+                            error: `La jornada ${docente.jornada} no tiene clases los ${diaActual === 0 ? 'domingos' : 'sábados'}`,
+                            tipo: 'docente',
+                            persona: {
+                                id: docente.id,
+                                nombre: docente.nombre,
+                                jornada: docente.jornada
+                            }
+                        });
+                    }
+                } else if (docente.jornada === 'Fin de semana') {
+                    // Jornada Fin de semana: Solo domingos (0)
+                    if (diaActual !== 0) {
+                        const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+                        return res.status(400).json({
+                            error: `La jornada Fin de semana solo tiene clases los domingos. Hoy es ${dias[diaActual]}`,
+                            tipo: 'docente',
+                            persona: {
+                                id: docente.id,
+                                nombre: docente.nombre,
+                                jornada: docente.jornada
+                            }
+                        });
+                    }
+                }
+
                 // Calcular estado para DOCENTES según jornada
                 const [horas, minutos] = horaActual.split(':').map(Number);
                 const minutosDesdeMedianoche = horas * 60 + minutos;

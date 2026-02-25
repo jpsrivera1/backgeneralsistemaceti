@@ -1,10 +1,11 @@
 # Jornada "Fin de Semana" - Documentación
 
 ## 📅 Fecha de Implementación
-25 de febrero de 2026
+25 de febrero de 2026  
+**Actualización de validación de días**: 25 de febrero de 2026
 
 ## 🎯 Objetivo
-Agregar una nueva jornada "Fin de semana" al sistema de control académico para estudiantes y docentes que solo asisten los domingos.
+Agregar una nueva jornada "Fin de semana" al sistema de control académico para estudiantes y docentes que solo asisten los domingos, con validación automática del día de la semana.
 
 ## 📋 Características de la Jornada
 
@@ -62,6 +63,35 @@ if (!['Matutina', 'Vespertina', 'Fin de semana'].includes(jornada)) {
 }
 ```
 
+**Validación de Día de la Semana (NUEVA - 25 feb 2026):**
+```javascript
+// Nueva función helper
+const getGuatemalaDayOfWeek = () => {
+    return getGuatemalaDate().getDay(); // 0=Domingo, 1=Lunes, ..., 6=Sábado
+};
+
+// Para Estudiantes (antes de calcular estado):
+const diaActual = getGuatemalaDayOfWeek();
+
+if (estudiante.jornada === 'Matutina' || estudiante.jornada === 'Vespertina') {
+    // Solo lunes a viernes (1-5)
+    if (diaActual === 0 || diaActual === 6) {
+        return res.status(400).json({
+            error: `La jornada ${estudiante.jornada} no tiene clases los ${diaActual === 0 ? 'domingos' : 'sábados'}`
+        });
+    }
+} else if (estudiante.jornada === 'Fin de semana') {
+    // Solo domingos (0)
+    if (diaActual !== 0) {
+        return res.status(400).json({
+            error: `La jornada Fin de semana solo tiene clases los domingos`
+        });
+    }
+}
+
+// Para Docentes: Misma validación antes de registrar entrada
+```
+
 ### Frontend - reportes_academicos
 
 #### 3. **src/pages/RegistrarDocente.jsx**
@@ -114,8 +144,11 @@ const getJornadaIcon = (jornada) => {
 
 ### Backend
 - **Repo**: backgeneralsistemaceti
-- **Commit**: `c102dae`
-- **Mensaje**: "feat: Agregar jornada 'Fin de semana' - Asistencias solo domingos, estudiantes antes 7:00, docentes antes 6:50"
+- **Commit inicial**: `c102dae` + documentación `67b888d`
+- **Commit validación de días**: (pendiente)
+- **Mensajes**: 
+  - "feat: Agregar jornada 'Fin de semana' - Asistencias solo domingos, estudiantes antes 7:00, docentes antes 6:50"
+  - "feat: Agregar validación automática de día de la semana según jornada"
 
 ### Frontend - reportes_academicos
 - **Repo**: controlacademico
@@ -130,33 +163,47 @@ const getJornadaIcon = (jornada) => {
 ## ✅ Verificación Post-Implementación
 
 ### Pasos para probar:
-1. **Registrar un docente de "Fin de semana"**:
+
+#### 1. **Registrar un docente de "Fin de semana"**:
    - Ir a cualquier frontend → Docentes → Registrar Docente
    - Seleccionar jornada "Fin de semana"
    - Guardar
 
-2. **Verificar asistencia en domingo**:
+#### 2. **Verificar asistencia en domingo**:
    - Marcar tarjeta NFC un domingo antes de 6:50 AM → Debe registrar "A_TIEMPO"
    - Marcar tarjeta NFC un domingo después de 6:50 AM → Debe registrar "TARDE"
 
-3. **Verificar filtros**:
+#### 3. **Verificar validación de día (NUEVO)**:
+   - **Jornada Matutina/Vespertina en fin de semana**:
+     - Intentar marcar asistencia un sábado o domingo → Debe rechazar con mensaje de error
+     - Mensaje esperado: "La jornada [X] no tiene clases los domingos/sábados"
+   
+   - **Jornada Fin de semana en día de semana**:
+     - Intentar marcar asistencia de lunes a sábado → Debe rechazar con mensaje de error
+     - Mensaje esperado: "La jornada Fin de semana solo tiene clases los domingos. Hoy es [día]"
+
+#### 4. **Verificar filtros**:
    - Lista de Docentes → Filtro Jornada → Debe aparecer "Fin de semana"
 
-4. **Verificar reportes**:
+#### 5. **Verificar reportes**:
    - admin-panel → Reportes Docentes → Los docentes de "Fin de semana" deben aparecer
 
 ## 📝 Notas Importantes
 
-- ⚠️ **La lógica solo valida la hora, NO valida automáticamente que sea domingo**. La validación de día debe manejarse externamente o agregarse en una futura iteración.
-- Los docentes de "Fin de semana" pueden registrar asistencia cualquier día, pero la intención es que solo lo hagan los domingos.
-- El sistema de cierre automático a medianoche sigue funcionando igual para todas las jornadas.
+- ✅ **El sistema valida automáticamente el día de la semana** según la jornada (implementado 25 feb 2026)
+  - **Matutina/Vespertina**: Rechaza asistencias en sábados y domingos
+  - **Fin de semana**: Rechaza asistencias de lunes a sábado, solo permite domingos
+- Los mensajes de error indican claramente qué día es válido para cada jornada
+- El sistema de cierre automático a medianoche sigue funcionando igual para todas las jornadas
+- La validación se aplica tanto a estudiantes como a docentes
 
 ## 🔮 Mejoras Futuras Sugeridas
 
-1. **Validación de día de semana**: Agregar lógica para rechazar asistencias si no es domingo para jornada "Fin de semana"
-2. **Alertas visuales**: Mostrar advertencia si se intenta marcar asistencia en día incorrecto
-3. **Reportes específicos**: Crear reportes filtrados solo por domingos para esta jornada
+1. ~~**Validación de día de semana**~~ ✅ **IMPLEMENTADO** (25 feb 2026)
+2. **Alertas visuales en frontend**: Mostrar advertencia preventiva si se intenta registrar en día incorrecto
+3. **Reportes específicos**: Crear reportes filtrados solo por domingos para jornada "Fin de semana"
 4. **Dashboard**: Mostrar contador separado para jornada de fin de semana
+5. **Calendario visual**: Mostrar días hábiles por jornada en la interfaz
 
 ---
 
