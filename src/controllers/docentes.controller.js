@@ -12,10 +12,10 @@ const registrarDocente = async (req, res) => {
       });
     }
 
-    if (!['Matutina', 'Vespertina'].includes(jornada)) {
+    if (!['Matutina', 'Vespertina', 'Fin de semana'].includes(jornada)) {
       return res.status(400).json({
         ok: false,
-        mensaje: 'Jornada debe ser Matutina o Vespertina'
+        mensaje: 'Jornada debe ser Matutina, Vespertina o Fin de semana'
       });
     }
 

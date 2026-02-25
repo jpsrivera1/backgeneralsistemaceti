@@ -286,6 +286,18 @@ const registrarAsistencia = async (req, res) => {
                 } else {
                     estadoAsistencia = 'AUSENTE';
                 }
+            } else if (estudiante.jornada === 'Fin de semana') {
+                // Jornada Fin de semana (solo domingos): A_TIEMPO < 7:00, TARDE 7:00-7:59, AUSENTE ≥ 8:00
+                const limiteATiempo = 7 * 60; // 7:00 AM = 420 minutos
+                const limiteAusente = 8 * 60; // 8:00 AM = 480 minutos
+                
+                if (minutosDesdeMedianoche < limiteATiempo) {
+                    estadoAsistencia = 'A_TIEMPO';
+                } else if (minutosDesdeMedianoche < limiteAusente) {
+                    estadoAsistencia = 'TARDE';
+                } else {
+                    estadoAsistencia = 'AUSENTE';
+                }
             }
 
             // Registrar asistencia
@@ -339,6 +351,8 @@ const registrarAsistencia = async (req, res) => {
                     limite = 7 * 60; // 7:00 AM en minutos (420 minutos)
                 } else if (docente.jornada === 'Vespertina') {
                     limite = 13 * 60 + 10; // 1:10 PM en minutos (790 minutos)
+                } else if (docente.jornada === 'Fin de semana') {
+                    limite = 6 * 60 + 50; // 6:50 AM en minutos (410 minutos)
                 }
                 
                 let estadoAsistencia = 'A_TIEMPO';
