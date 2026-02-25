@@ -145,10 +145,10 @@ const getJornadaIcon = (jornada) => {
 ### Backend
 - **Repo**: backgeneralsistemaceti
 - **Commit inicial**: `c102dae` + documentación `67b888d`
-- **Commit validación de días**: (pendiente)
+- **Commit validación de días**: `54ebe8a`
 - **Mensajes**: 
   - "feat: Agregar jornada 'Fin de semana' - Asistencias solo domingos, estudiantes antes 7:00, docentes antes 6:50"
-  - "feat: Agregar validación automática de día de la semana según jornada"
+  - "feat: Validar automáticamente día de semana según jornada - Matutina/Vespertina lun-vie, Fin de semana solo dom"
 
 ### Frontend - reportes_academicos
 - **Repo**: controlacademico
