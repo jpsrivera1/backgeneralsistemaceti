@@ -529,8 +529,20 @@ const registrarAsistencia = async (req, res) => {
         }
 
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Error al registrar asistencia' });
+        console.error('Error detallado al registrar asistencia:', error);
+        console.error('Error message:', error.message);
+        console.error('Error code:', error.code);
+        console.error('Error details:', error.details);
+        console.error('Error hint:', error.hint);
+        
+        // Enviar más detalles del error al frontend
+        res.status(500).json({ 
+            error: 'Error al registrar asistencia',
+            mensaje: error.message || 'Error desconocido',
+            detalles: error.details || null,
+            hint: error.hint || null,
+            code: error.code || null
+        });
     }
 };
 
