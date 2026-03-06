@@ -173,7 +173,7 @@ pago_traje_graduandos
 
 ### Tarjeta Visual
 - **Color**: Morado (bg-purple-100, text-purple-700)
-- **Icono**: `bi-suit-heart-fill` 👔
+- **Icono**: `bi-award` (medalla/premio) 🏆
 - **Estados**:
   - Con pendiente: Muestra total, adelanto y pendiente en rojo
   - Sin pendiente: Verde con marcador "✓ CANCELADO"
