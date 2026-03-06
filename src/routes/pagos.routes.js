@@ -12,7 +12,9 @@ const {
     obtenerInfoRecibo,
     obtenerMetodosPago,
     obtenerPagoGraduacion,
-    guardarPagoGraduacion
+    guardarPagoGraduacion,
+    obtenerPagoTraje,
+    guardarPagoTraje
 } = require('../controllers/pagos.controller');
 
 // Buscar estudiantes por nombre
@@ -30,6 +32,13 @@ router.get('/graduacion/:studentId', obtenerPagoGraduacion);
 
 // Registrar pago de graduación
 router.post('/graduacion/:studentId', guardarPagoGraduacion);
+
+// ===== TRAJES DE GRADUANDOS =====
+// Obtener pago de traje
+router.get('/traje/:studentId', obtenerPagoTraje);
+
+// Registrar pago de traje
+router.post('/traje/:studentId', guardarPagoTraje);
 
 // ===== COLEGIATURAS =====
 // IMPORTANTE: Rutas más específicas primero

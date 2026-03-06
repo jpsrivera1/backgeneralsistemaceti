@@ -628,6 +628,150 @@ const guardarPagoGraduacion = async (req, res) => {
     }
 };
 
+// ==================== TRAJES DE GRADUANDOS ====================
+
+// Obtener pago de traje de graduando de un estudiante
+const obtenerPagoTraje = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+
+        // Obtener estudiante
+        const { data: estudiante, error: errorEst } = await supabase
+            .from('students')
+            .select('*')
+            .eq('id', studentId)
+            .single();
+
+        if (errorEst) throw errorEst;
+
+        // Verificar si aplica para graduación (mismo criterio que graduation_payments)
+        if (!verificarAplicaGraduacion(estudiante)) {
+            return res.status(200).json({ 
+                aplica: false, 
+                mensaje: 'El estudiante no aplica para pago de traje',
+                pago: null 
+            });
+        }
+
+        // Obtener pago existente
+        const { data: pago, error } = await supabase
+            .from('pago_traje_graduandos')
+            .select('*')
+            .eq('student_id', studentId)
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+
+        res.status(200).json({
+            aplica: true,
+            pago: pago || null
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error al obtener pago de traje' });
+    }
+};
+
+// Registrar o actualizar pago de traje de graduando
+const guardarPagoTraje = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        const { monto_total, monto_adelanto, payment_method_id } = req.body;
+
+        // Obtener estudiante
+        const { data: estudiante, error: errorEst } = await supabase
+            .from('students')
+            .select('*')
+            .eq('id', studentId)
+            .single();
+
+        if (errorEst) throw errorEst;
+
+        // Verificar si aplica para pago de traje
+        if (!verificarAplicaGraduacion(estudiante)) {
+            return res.status(400).json({
+                error: 'El estudiante no aplica para pago de traje de graduando'
+            });
+        }
+
+        // Obtener nombre del método de pago
+        let metodo_pago_nombre = 'N/A';
+        if (payment_method_id) {
+            const { data: metodoPago } = await supabase
+                .from('payment_methods')
+                .select('name')
+                .eq('id', payment_method_id)
+                .single();
+            if (metodoPago) metodo_pago_nombre = metodoPago.name;
+        }
+
+        // Verificar si ya existe
+        const { data: existente } = await supabase
+            .from('pago_traje_graduandos')
+            .select('*')
+            .eq('student_id', studentId)
+            .single();
+
+        let resultado;
+        let esAbono = false;
+        let montoAbonado = parseFloat(monto_adelanto || 0);
+
+        if (existente) {
+            esAbono = true;
+            // Actualizar pago existente (agregar al adelanto)
+            const nuevoMonto = parseFloat(existente.monto_adelanto) + montoAbonado;
+            
+            const { data, error } = await supabase
+                .from('pago_traje_graduandos')
+                .update({
+                    monto_adelanto: nuevoMonto,
+                    payment_method_id: payment_method_id || existente.payment_method_id,
+                    fecha_actualizacion: new Date()
+                })
+                .eq('student_id', studentId)
+                .select()
+                .single();
+
+            if (error) throw error;
+            resultado = data;
+        } else {
+            // Crear nuevo pago
+            const { data, error } = await supabase
+                .from('pago_traje_graduandos')
+                .insert({
+                    student_id: studentId,
+                    monto_total: parseFloat(monto_total),
+                    monto_adelanto: parseFloat(monto_adelanto || 0),
+                    payment_method_id: payment_method_id || null
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+            resultado = data;
+        }
+
+        // Generar número de recibo
+        const anioActual = new Date().getFullYear();
+        const numeroRecibo = `TRA-${anioActual}-${String(Date.now()).slice(-6)}`;
+
+        const estaCancelado = parseFloat(resultado.monto_pendiente) === 0;
+
+        res.status(200).json({
+            pago: resultado,
+            estudiante,
+            numeroRecibo,
+            montoAbonado,
+            estaCancelado,
+            esAbono,
+            metodo_pago: metodo_pago_nombre
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error al guardar pago de traje' });
+    }
+};
+
 module.exports = {
     buscarEstudiantes,
     obtenerPagosEstudiante,
@@ -640,5 +784,7 @@ module.exports = {
     obtenerInfoRecibo,
     obtenerMetodosPago,
     obtenerPagoGraduacion,
-    guardarPagoGraduacion
+    guardarPagoGraduacion,
+    obtenerPagoTraje,
+    guardarPagoTraje
 };
