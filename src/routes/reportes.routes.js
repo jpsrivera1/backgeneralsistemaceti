@@ -278,28 +278,57 @@ router.get('/alumno', async (req, res) => {
 
         if (errorAsistencias) throw errorAsistencias;
 
+        const normalizarTexto = (texto = '') =>
+            texto
+                .toString()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .trim()
+                .toLowerCase();
+
+        const formatearFechaLocal = (fecha) => {
+            const y = fecha.getFullYear();
+            const m = String(fecha.getMonth() + 1).padStart(2, '0');
+            const d = String(fecha.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        };
+
+        const modalidadNormalizada = normalizarTexto(estudiante.modalidad || estudiante.jornada || '');
+        const esModalidadFinDeSemana = modalidadNormalizada === 'fin de semana';
+
+        const esDiaValidoParaModalidad = (fecha) => {
+            const fechaObj = new Date(`${fecha}T12:00:00`);
+            const diaSemana = fechaObj.getDay(); // 0=Domingo, 1=Lunes, ..., 6=Sábado
+
+            // Fin de semana: solo domingos. Diario (matutina/vespertina): lunes a viernes.
+            if (esModalidadFinDeSemana) return diaSemana === 0;
+            return diaSemana >= 1 && diaSemana <= 5;
+        };
+
         // Calcular resumen
         let asistenciasATiempo = 0;
         let tardes = 0;
         let ausencias = 0;
         const horasLlegada = []; // Para calcular promedio de hora de llegada
 
-        // Generar lista de todos los días del período (solo días de semana)
+        // Generar lista de días válidos del período según la modalidad.
         const fechaInicial = new Date(fechaInicio);
         const fechaFinal = new Date(fechaFin);
         const diasPeriodo = [];
         
         for (let d = new Date(fechaInicial); d <= fechaFinal; d.setDate(d.getDate() + 1)) {
-            // Solo días de semana (lunes a viernes)
-            const diaSemana = d.getDay();
-            if (diaSemana !== 0 && diaSemana !== 6) {
-                diasPeriodo.push(new Date(d).toISOString().split('T')[0]);
+            const fechaDia = formatearFechaLocal(d);
+            if (esDiaValidoParaModalidad(fechaDia)) {
+                diasPeriodo.push(fechaDia);
             }
         }
 
+        // Solo tomar asistencias de los días válidos para la modalidad del estudiante.
+        const asistenciasValidas = asistencias.filter(asist => esDiaValidoParaModalidad(asist.fecha));
+
         // Crear mapa de asistencias y calcular estadísticas
         const mapaAsistencias = {};
-        asistencias.forEach(asist => {
+        asistenciasValidas.forEach(asist => {
             mapaAsistencias[asist.fecha] = asist;
             
             // Calcular estado

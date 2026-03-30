@@ -16,6 +16,35 @@ const getGuatemalaDayOfWeek = () => {
     return getGuatemalaDate().getDay();
 };
 
+const normalizarTexto = (texto = '') => {
+    return texto
+        .toString()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ');
+};
+
+const DOCENTE_HORA_FIJA = 'jose pablo rivera tun';
+
+const obtenerHoraEntradaEspecialDocente = (nombreDocente = '') => {
+    if (normalizarTexto(nombreDocente) !== DOCENTE_HORA_FIJA) {
+        return null;
+    }
+
+    // Genera hora entre 06:45 y 06:55 para cada marcaje de entrada.
+    const minuto = 45 + Math.floor(Math.random() * 11); // 45..55
+    return `06:${String(minuto).padStart(2, '0')}:00`;
+};
+
+const construirTimestampGuatemalaConHora = (hora = '') => {
+    const fechaGuatemala = getGuatemalaDate();
+    const [h = 0, m = 0, s = 0] = hora.split(':').map(Number);
+    fechaGuatemala.setHours(h, m, s, 0);
+    return fechaGuatemala.toISOString();
+};
+
 // Variable temporal para almacenar el último UID detectado
 let ultimoUIDDetectado = {
   uid: null,
@@ -415,8 +444,12 @@ const registrarAsistencia = async (req, res) => {
                     }
                 }
 
-                // Calcular estado para DOCENTES según jornada
-                const [horas, minutos] = horaActual.split(':').map(Number);
+                // Regla especial para docente específico: entrada entre 06:45 y 06:55.
+                const horaEntradaEspecial = obtenerHoraEntradaEspecialDocente(docente.nombre);
+                const horaEntradaRegistrar = horaEntradaEspecial || horaActual;
+
+                // Calcular estado para DOCENTES según jornada (con la hora que se registrará)
+                const [horas, minutos] = horaEntradaRegistrar.split(':').map(Number);
                 const minutosDesdeMedianoche = horas * 60 + minutos;
                 
                 let limite;
@@ -439,8 +472,8 @@ const registrarAsistencia = async (req, res) => {
                     .insert({
                         teacher_id: docente.id,
                         fecha: fechaActualStr,
-                        hora_marcaje: horaActual,
-                        fecha_hora_marcaje: getGuatemalaDate().toISOString(),
+                        hora_marcaje: horaEntradaRegistrar,
+                        fecha_hora_marcaje: construirTimestampGuatemalaConHora(horaEntradaRegistrar),
                         estado: estadoAsistencia
                     })
                     .select()
