@@ -351,9 +351,8 @@ router.get('/alumno', async (req, res) => {
             }
         });
 
-        // Calcular rango promedio de llegada
-        let rangoPromedio = 'N/A';
-        let horaPromedioTexto = 'N/A';
+        // Calcular rango de hora de llegada (solo días con marcaje)
+        let horaRangoTexto = 'N/A';
         
         if (horasLlegada.length > 0) {
             // Convertir horas a minutos desde medianoche
@@ -362,34 +361,18 @@ router.get('/alumno', async (req, res) => {
                 return h * 60 + m;
             });
             
-            // Calcular promedio
-            const promedioMinutos = Math.round(
-                minutosLlegada.reduce((a, b) => a + b, 0) / minutosLlegada.length
-            );
-            
-            // Convertir de vuelta a hora
-            const horasProm = Math.floor(promedioMinutos / 60);
-            const minutosProm = promedioMinutos % 60;
-            horaPromedioTexto = `${String(horasProm).padStart(2, '0')}:${String(minutosProm).padStart(2, '0')}`;
-            
-            // Determinar el rango según la jornada del estudiante
-            if (estudiante.jornada === 'Matutina') {
-                if (promedioMinutos <= 7 * 60 + 20) { // <= 7:20
-                    rangoPromedio = 'Puntual (antes de 7:20 AM)';
-                } else if (promedioMinutos <= 8 * 60) { // <= 8:00
-                    rangoPromedio = 'Ocasionalmente tarde (7:20-8:00 AM)';
-                } else {
-                    rangoPromedio = 'Frecuentemente tarde (después de 8:00 AM)';
-                }
-            } else if (estudiante.jornada === 'Vespertina') {
-                if (promedioMinutos <= 13 * 60 + 20) { // <= 13:20
-                    rangoPromedio = 'Puntual (antes de 1:20 PM)';
-                } else if (promedioMinutos <= 14 * 60) { // <= 14:00
-                    rangoPromedio = 'Ocasionalmente tarde (1:20-2:00 PM)';
-                } else {
-                    rangoPromedio = 'Frecuentemente tarde (después de 2:00 PM)';
-                }
-            }
+            const minimoMinutos = Math.min(...minutosLlegada);
+            const maximoMinutos = Math.max(...minutosLlegada);
+
+            const formatearMinutosAHora = (minutosTotal) => {
+                const h = Math.floor(minutosTotal / 60);
+                const m = minutosTotal % 60;
+                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+            };
+
+            const horaMin = formatearMinutosAHora(minimoMinutos);
+            const horaMax = formatearMinutosAHora(maximoMinutos);
+            horaRangoTexto = minimoMinutos === maximoMinutos ? horaMin : `${horaMin} - ${horaMax}`;
         }
 
         res.json({
@@ -400,8 +383,8 @@ router.get('/alumno', async (req, res) => {
                 tardes,
                 ausencias,
                 total_dias: diasPeriodo.length,
-                hora_promedio_llegada: horaPromedioTexto,
-                rango_promedio: rangoPromedio
+                hora_rango_llegada: horaRangoTexto,
+                hora_promedio_llegada: horaRangoTexto
             }
         });
     } catch (error) {
