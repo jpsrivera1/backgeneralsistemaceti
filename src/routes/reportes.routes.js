@@ -360,19 +360,24 @@ router.get('/alumno', async (req, res) => {
                 const [h, m] = hora.split(':').map(Number);
                 return h * 60 + m;
             });
+
+            // Para jornada matutina, mostrar rango institucional fijo.
+            if (estudiante.jornada === 'Matutina') {
+                horaRangoTexto = '07:00 - 08:00';
+            } else {
+                const minimoMinutos = Math.min(...minutosLlegada);
+                const maximoMinutos = Math.max(...minutosLlegada);
             
-            const minimoMinutos = Math.min(...minutosLlegada);
-            const maximoMinutos = Math.max(...minutosLlegada);
+                const formatearMinutosAHora = (minutosTotal) => {
+                    const h = Math.floor(minutosTotal / 60);
+                    const m = minutosTotal % 60;
+                    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                };
 
-            const formatearMinutosAHora = (minutosTotal) => {
-                const h = Math.floor(minutosTotal / 60);
-                const m = minutosTotal % 60;
-                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-            };
-
-            const horaMin = formatearMinutosAHora(minimoMinutos);
-            const horaMax = formatearMinutosAHora(maximoMinutos);
-            horaRangoTexto = minimoMinutos === maximoMinutos ? horaMin : `${horaMin} - ${horaMax}`;
+                const horaMin = formatearMinutosAHora(minimoMinutos);
+                const horaMax = formatearMinutosAHora(maximoMinutos);
+                horaRangoTexto = minimoMinutos === maximoMinutos ? horaMin : `${horaMin} - ${horaMax}`;
+            }
         }
 
         res.json({
