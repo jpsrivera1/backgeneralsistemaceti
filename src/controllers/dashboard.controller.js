@@ -211,11 +211,13 @@ const getIncomeByMonthData = async (start, end) => {
                                     ingresosPorMes[mes] = {
                                         total_ingresos: 0,
                                         efectivo_ingresos: 0,
-                                        transferencia_ingresos: 0
+                                        transferencia_ingresos: 0,
+                                        total_ventas: 0
                                     };
                                 }
 
                                 ingresosPorMes[mes].total_ingresos += monto;
+                                ingresosPorMes[mes].total_ventas += 1;
 
                                 const nombreMetodo = metodosPorId[pago.payment_method_id] || '';
                                 if (metodoEsEfectivo(nombreMetodo)) {
@@ -237,7 +239,8 @@ const getIncomeByMonthData = async (start, end) => {
                 mes,
                 total_ingresos: valores.total_ingresos,
                 efectivo_ingresos: valores.efectivo_ingresos,
-                transferencia_ingresos: valores.transferencia_ingresos
+                transferencia_ingresos: valores.transferencia_ingresos,
+                total_ventas: valores.total_ventas || 0
             }))
             .sort((a, b) => b.mes.localeCompare(a.mes))
             .slice(0, 12);
