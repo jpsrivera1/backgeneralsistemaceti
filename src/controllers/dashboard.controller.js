@@ -138,6 +138,34 @@ const getIncomeByMonthData = async (start, end) => {
     try {
         const ingresosPorMes = {};
         const processedPaymentIds = new Set(); // Prevenir duplicados
+
+        const normalizarTexto = (texto = '') =>
+            texto
+                .toString()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .trim()
+                .toLowerCase();
+
+        const metodoEsEfectivo = (nombreMetodo = '') => {
+            const t = normalizarTexto(nombreMetodo);
+            return t.includes('efectivo');
+        };
+
+        const metodoEsTransferencia = (nombreMetodo = '') => {
+            const t = normalizarTexto(nombreMetodo);
+            return t.includes('transferencia') || t.includes('deposito') || t.includes('depósito');
+        };
+
+        // Cargar catálogo de métodos una sola vez para clasificar montos.
+        const { data: metodosPago } = await supabase
+            .from('payment_methods')
+            .select('id, name');
+
+        const metodosPorId = (metodosPago || []).reduce((acc, metodo) => {
+            acc[metodo.id] = metodo.name || '';
+            return acc;
+        }, {});
         
         // Tablas de pago a consultar
         const tablasPago = [
@@ -158,7 +186,7 @@ const getIncomeByMonthData = async (start, end) => {
             try {
                 let query = supabase
                     .from(config.tabla)
-                    .select(`id, created_at, ${config.campo}`);
+                    .select(`id, created_at, ${config.campo}, payment_method_id`);
                 
                 // Aplicar filtro de fechas si se proporcionan
                 if (start && end) {
@@ -179,7 +207,22 @@ const getIncomeByMonthData = async (start, end) => {
                             // ✓ Validar NaN
                             const monto = parseFloat(pago[config.campo]);
                             if (!isNaN(monto) && monto > 0) {
-                                ingresosPorMes[mes] = (ingresosPorMes[mes] || 0) + monto;
+                                if (!ingresosPorMes[mes]) {
+                                    ingresosPorMes[mes] = {
+                                        total_ingresos: 0,
+                                        efectivo_ingresos: 0,
+                                        transferencia_ingresos: 0
+                                    };
+                                }
+
+                                ingresosPorMes[mes].total_ingresos += monto;
+
+                                const nombreMetodo = metodosPorId[pago.payment_method_id] || '';
+                                if (metodoEsEfectivo(nombreMetodo)) {
+                                    ingresosPorMes[mes].efectivo_ingresos += monto;
+                                } else if (metodoEsTransferencia(nombreMetodo)) {
+                                    ingresosPorMes[mes].transferencia_ingresos += monto;
+                                }
                             }
                         }
                     });
@@ -190,7 +233,12 @@ const getIncomeByMonthData = async (start, end) => {
         }
         
         return Object.entries(ingresosPorMes)
-            .map(([mes, total_ingresos]) => ({ mes, total_ingresos }))
+            .map(([mes, valores]) => ({
+                mes,
+                total_ingresos: valores.total_ingresos,
+                efectivo_ingresos: valores.efectivo_ingresos,
+                transferencia_ingresos: valores.transferencia_ingresos
+            }))
             .sort((a, b) => b.mes.localeCompare(a.mes))
             .slice(0, 12);
     } catch (error) {
