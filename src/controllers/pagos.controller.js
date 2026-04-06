@@ -337,35 +337,6 @@ const verificarMesPagado = async (req, res) => {
     }
 };
 
-// Calcular mora (solo de abril a octubre, a partir del día 6 del mes que se está pagando)
-const calcularMora = (mesNombre = '') => {
-    const fechaActual = new Date();
-    const mesActual = fechaActual.getMonth() + 1; // getMonth() devuelve 0-11
-    const diaActual = fechaActual.getDate();
-    
-    // Mapeo de nombres de mes a números
-    const mesesMap = {
-        'ENERO': 1, 'FEBRERO': 2, 'MARZO': 3, 'ABRIL': 4,
-        'MAYO': 5, 'JUNIO': 6, 'JULIO': 7, 'AGOSTO': 8,
-        'SEPTIEMBRE': 9, 'OCTUBRE': 10, 'NOVIEMBRE': 11, 'DICIEMBRE': 12
-    };
-    
-    const mesPagar = mesesMap[mesNombre.toUpperCase()] || 0;
-    
-    // Solo aplicar mora de abril (4) a octubre (10)
-    if (mesPagar < 4 || mesPagar > 10) {
-        return 0.00;
-    }
-    
-    // Aplicar mora solo si estamos en el mes que se está pagando y después del día 5
-    // O si ya pasó el mes que se está pagando
-    if (mesActual > mesPagar || (mesActual === mesPagar && diaActual > 5)) {
-        return 30.00;
-    }
-    
-    return 0.00;
-};
-
 // Registrar pago de colegiatura
 const registrarColegiatura = async (req, res) => {
     try {
@@ -406,17 +377,17 @@ const registrarColegiatura = async (req, res) => {
             if (metodoPago) metodo_pago_nombre = metodoPago.name;
         }
 
-        // Calcular mora según la lógica de negocio (solo febrero a octubre)
-        const mora = calcularMora(mes);
+        // Se elimina el cobro de mora para todos los pagos.
+        const mora = 0;
 
-        // Insertar pago con la mora calculada (total_pagado se calcula automáticamente en la BD)
+        // Insertar pago sin mora (total_pagado se calcula automáticamente en la BD)
         const { data, error } = await supabase
             .from('pago_colegiaturas')
             .insert({
                 student_id: studentId,
                 mes: mes.toUpperCase(),
                 monto_colegiatura: parseFloat(monto_colegiatura),
-                mora: mora,
+                mora,
                 fecha_pago: new Date().toISOString().split('T')[0],
                 payment_method_id: payment_method_id || null
             })
@@ -432,7 +403,7 @@ const registrarColegiatura = async (req, res) => {
             pago: data,
             estudiante,
             numeroBoleto,
-            mora: data.mora,
+            mora: 0,
             total: data.total_pagado,
             metodo_pago: metodo_pago_nombre
         });

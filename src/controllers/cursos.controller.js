@@ -1,23 +1,5 @@
 const supabase = require('../config/supabase');
 
-// Calcular mora (solo de marzo a octubre, si el día actual es mayor a 5)
-const calcularMora = (mesId = 0) => {
-    const fechaActual = new Date();
-    const mesActual = fechaActual.getMonth() + 1;
-    const diaActual = fechaActual.getDate();
-    
-    // El mes_id corresponde directamente al número del mes (1=Enero, 2=Febrero, etc.)
-    const mesPagar = parseInt(mesId) || 0;
-    
-    // Solo aplicar mora de marzo (3) a octubre (10)
-    // Aplicar mora solo si estamos en el mes que se está pagando y después del día 5
-    // O si ya pasó el mes que se está pagando
-    if (mesPagar >= 3 && mesPagar <= 10 && (mesActual > mesPagar || (mesActual === mesPagar && diaActual > 5))) {
-        return 30.00;
-    }
-    return 0.00;
-};
-
 // ==================== CURSOS EXTRA ====================
 
 // Obtener todos los cursos extra
@@ -180,8 +162,8 @@ const registrarPagoCurso = async (req, res) => {
     try {
         const { estudiante_id, mes_id, monto, payment_method_id } = req.body;
         
-        // Recalcular mora en el backend para asegurar consistencia
-        const moraCalculada = calcularMora(mes_id);
+        // Se elimina el cobro de mora para todos los pagos.
+        const moraCalculada = 0;
 
         // Obtener datos del estudiante con su curso
         const { data: estudiante, error: errorEst } = await supabase
@@ -232,8 +214,8 @@ const registrarPagoCurso = async (req, res) => {
             return res.status(400).json({ error: 'Este mes ya fue pagado' });
         }
 
-        // Calcular total con mora
-        const montoTotal = parseFloat(monto) + moraCalculada;
+        // El monto final corresponde al monto base del curso.
+        const montoTotal = parseFloat(monto);
 
         // Insertar pago
         const { data, error } = await supabase
