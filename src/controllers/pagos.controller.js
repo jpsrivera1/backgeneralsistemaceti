@@ -8,7 +8,8 @@ const TIPOS_PAGO = {
     copias_anuales: 'pago_copias_anuales',
     libro_ingles: 'pago_libro_ingles',
     excursion: 'pago_excursion',
-    especialidad: 'pago_especialidad'
+    especialidad: 'pago_especialidad',
+    dia_madre: 'pago_dia_madre'
 };
 
 // Nombres legibles de tipos de pago
@@ -19,7 +20,8 @@ const NOMBRES_PAGO = {
     copias_anuales: 'Copias Anuales',
     libro_ingles: 'Libro de Inglés',
     excursion: 'Excursión',
-    especialidad: 'Especialidad'
+    especialidad: 'Especialidad',
+    dia_madre: 'Día de la Madre'
 };
 
 // Grados que aplican para pago de graduación (todas las modalidades y jornadas)
